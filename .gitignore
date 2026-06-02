@@ -1,0 +1,37 @@
+# Python/cache artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+
+# Training/runtime outputs
+output/
+outputs/
+runs/
+logs/
+tensorboard/
+wandb/
+
+# Checkpoints and generated evaluation/data artifacts
+*.pth
+*.pt
+*.ckpt
+*.pkl
+*.npy
+*.npz
+*.bin
+*.pcd
+*.bag
+*.jsonl
+
+# Keep lightweight split files, ignore raw datasets by default.
+data/*
+!data/*/
+!data/*/ImageSets/
+!data/*/ImageSets/*.txt
+
+# Local/editor files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
