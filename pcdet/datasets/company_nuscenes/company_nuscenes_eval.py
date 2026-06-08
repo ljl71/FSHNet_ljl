@@ -145,7 +145,7 @@ def evaluate_company_predictions(
         'gt_stats': gt_stats or {},
         'official_NDS': None,
         'official_NDS_reason': (
-            'Not available: custom 26-class taxonomy and no velocity/attribute predictions.'
+            'Not available: custom company taxonomy and no velocity/attribute predictions.'
         ),
     }
 
