@@ -30,7 +30,9 @@ class CompanyNuScenesDataset(DatasetTemplate):
     def include_company_nuscenes_data(self, mode):
         self._log('Loading CompanyNuScenes dataset')
         company_infos = []
-        for info_path in self.dataset_cfg.INFO_PATH[mode]:
+        split_name = self.dataset_cfg.get('DATA_SPLIT', {}).get(mode, mode)
+        info_mode = split_name if split_name in self.dataset_cfg.INFO_PATH else mode
+        for info_path in self.dataset_cfg.INFO_PATH[info_mode]:
             info_path = self.metadata_path / info_path
             if not info_path.exists():
                 self._log(f'Missing info file: {info_path}')

@@ -8,6 +8,8 @@
 
 因此，本实验新增一套 10 类主语义类别任务。它不替代原始 26 类任务，而是在保持相同点云、相同 train/val 划分和相同评估协议的基础上，将细粒度类别按语义和业务用途合并，用于观察类别重组后检测稳定性和主类别性能变化。
 
+需要强调的是，26 类到 10 类合并解决的是任务粒度问题，而不是数据质量问题。26 类结果仍然用于展示细粒度长尾检测的困难；10 类结果用于衡量语义重组后模型对主类别的定位和识别能力。论文中应同时保留这两组实验，使读者能够看到类别粒度变化带来的影响。
+
 ## 为什么不直接只用官方数据集
 
 nuScenes、Waymo 和 Argoverse2 等公开数据集是通用自动驾驶检测基准，具有成熟的类别体系和评估协议。但公司自建数据集反映的是公司实际采集设备、点云格式、标注规范、道路场景和业务部署目标。直接只使用官方数据集无法覆盖这些工程和业务差异，也无法回答模型在公司真实数据分布下的表现。
@@ -76,13 +78,22 @@ tools/cfgs/nuscenes_models/company_fshnet_10cls_trainval.yaml
 
 原始 26 类配置 `tools/cfgs/nuscenes_models/company_fshnet_26cls_trainval.yaml` 不需要修改，仍然用于原始细粒度类别实验。
 
+如果需要正式论文实验中的独立测试集，可以使用按 scene 划分的 train/val/test 配置：
+
+```text
+tools/cfgs/dataset_configs/company_nuscenes_10cls_trainvaltest_dataset.yaml
+tools/cfgs/nuscenes_models/company_fshnet_10cls_trainvaltest.yaml
+```
+
+该配置不替代当前 80/20 train/val 方案，而是新增一套更正式的实验划分。训练使用 train pkl，调参与模型选择使用 val pkl，最终报告使用 test pkl。
+
 ## 实验命令
 
 生成 10 类 info：
 
 ```bash
 cd ~/WXY/pointcloud_Projects/FSHNet_ljl
-/home/ubuntu/anaconda3/envs/fshnet/bin/python tools/company_nuscenes/create_company_10cls_infos.py --data_path data/nuscenes --version v1.0-trainval
+/home/ubuntu/anaconda3/envs/fshnet/bin/python tools/company_nuscenes/create_company_10cls_infos.py --data_path data/nuscenes --version v1.0-trainval --split_mode trainval
 ```
 
 该命令读取：
@@ -99,6 +110,28 @@ data/nuscenes/v1.0-trainval/company_nuscenes_10cls_infos_train.pkl
 data/nuscenes/v1.0-trainval/company_nuscenes_10cls_infos_val.pkl
 ```
 
+生成正式 train/val/test 版 10 类 info：
+
+```bash
+cd ~/WXY/pointcloud_Projects/FSHNet_ljl
+/home/ubuntu/anaconda3/envs/fshnet/bin/python tools/company_nuscenes/create_company_10cls_infos.py \
+  --data_path data/nuscenes \
+  --version v1.0-trainval \
+  --split_mode trainvaltest \
+  --train_ratio 0.7 \
+  --val_ratio 0.1 \
+  --test_ratio 0.2 \
+  --split_seed 0
+```
+
+该模式会合并原始 26 类 train/val info，然后按 `scene_token` 重新划分，生成：
+
+```text
+data/nuscenes/v1.0-trainval/company_nuscenes_10cls_infos_train.pkl
+data/nuscenes/v1.0-trainval/company_nuscenes_10cls_infos_val.pkl
+data/nuscenes/v1.0-trainval/company_nuscenes_10cls_infos_test.pkl
+```
+
 训练 10 类 FSHNet：
 
 ```bash
@@ -113,6 +146,39 @@ cd ~/WXY/pointcloud_Projects/FSHNet_ljl
 CUDA_VISIBLE_DEVICES=0 /home/ubuntu/anaconda3/envs/fshnet/bin/python tools/test.py --cfg_file tools/cfgs/nuscenes_models/company_fshnet_10cls_trainval.yaml --batch_size 1 --ckpt output/nuscenes_models/company_fshnet_10cls_trainval/company_fshnet_10cls_2gpu_bs2_run1/ckpt/checkpoint_epoch_36.pth
 ```
 
+使用正式 train/val/test 配置训练：
+
+```bash
+cd ~/WXY/pointcloud_Projects/FSHNet_ljl
+CUDA_VISIBLE_DEVICES=0,1 /home/ubuntu/anaconda3/envs/fshnet/bin/python -m torch.distributed.launch --nproc_per_node=2 tools/train.py --launcher pytorch --cfg_file tools/cfgs/nuscenes_models/company_fshnet_10cls_trainvaltest.yaml --batch_size 2 --workers 4 --extra_tag company_fshnet_10cls_trainvaltest_2gpu_bs2_run1
+```
+
+使用正式 test split 测试：
+
+```bash
+cd ~/WXY/pointcloud_Projects/FSHNet_ljl
+CUDA_VISIBLE_DEVICES=0 /home/ubuntu/anaconda3/envs/fshnet/bin/python tools/test.py --cfg_file tools/cfgs/nuscenes_models/company_fshnet_10cls_trainvaltest.yaml --batch_size 1 --ckpt output/nuscenes_models/company_fshnet_10cls_trainvaltest/company_fshnet_10cls_trainvaltest_2gpu_bs2_run1/ckpt/checkpoint_epoch_36.pth
+```
+
+如需在同一正式配置下临时评估 val split，可在命令行覆盖 `DATA_CONFIG.DATA_SPLIT.test`：
+
+```bash
+cd ~/WXY/pointcloud_Projects/FSHNet_ljl
+CUDA_VISIBLE_DEVICES=0 /home/ubuntu/anaconda3/envs/fshnet/bin/python tools/test.py --cfg_file tools/cfgs/nuscenes_models/company_fshnet_10cls_trainvaltest.yaml --batch_size 1 --ckpt output/nuscenes_models/company_fshnet_10cls_trainvaltest/company_fshnet_10cls_trainvaltest_2gpu_bs2_run1/ckpt/checkpoint_epoch_36.pth --set DATA_CONFIG.DATA_SPLIT.test val
+```
+
+## 为什么需要独立测试集
+
+当前 80/20 train/val 方案适合快速验证数据读取、训练收敛和评估链路，但论文实验通常需要更严格地区分模型选择和最终报告。若所有调参、模型选择和最终指标都在同一 validation split 上完成，最终结果会不可避免地受到验证集反馈的影响。独立 test split 的作用是为最终模型提供一次相对未参与调参的评估，从而更客观地反映泛化能力。
+
+因此，推荐论文阶段使用 train/val/test 三段式流程：train 用于模型参数学习，val 用于选择 checkpoint、阈值和配置，test 只用于最终报告。这样可以避免将验证集上反复试验得到的偶然收益误认为模型真实性能提升。
+
+## 为什么必须按 scene 划分
+
+点云序列数据通常存在强时间相关性。同一个 scene 内的连续帧具有相近的道路结构、目标分布、天气光照和采集视角。如果按 sample 随机划分，很容易出现相邻帧分别落入 train、val 或 test 的情况。此时模型在测试时看到的场景与训练时高度相似，评估结果会偏乐观。
+
+按 scene 划分可以保证同一场景中的所有 sample 只进入一个 split，从源头上减少连续帧泄漏。对于公司自建数据集，这一点尤其重要，因为真实采集数据往往包含连续路段和重复目标，sample 随机划分会削弱测试集的独立性。
+
 ## 实验设计建议
 
 论文实验中建议同时报告原始 26 类 baseline 和合并 10 类 baseline。26 类结果用于说明细粒度类别检测在长尾分布下的困难，10 类结果用于说明类别语义重组后主类别检测的稳定性。二者关注的问题不同，不能只报告合并后更好看的指标。
@@ -121,11 +187,15 @@ CUDA_VISIBLE_DEVICES=0 /home/ubuntu/anaconda3/envs/fshnet/bin/python tools/test.
 
 - 原始 26 类 baseline 的整体 mAP 和分类别 AP。
 - 合并 10 类 baseline 的主类别 mAP 和分类别 AP。
+- 10 类 val split 上的模型选择结果。
+- 10 类 test split 上的最终泛化结果。
 - 不同距离区间的 mAP、precision、recall 和 F1。
 - 评估时的 TP、FP、FN 和平均每帧预测数量。
 - 部分典型类别的对比分析，例如行人、车辆、两轮车、交通锥和可移动物体。
 
 如果合并后指标提高，应解释为主语义类别任务降低了细粒度长尾分类难度，而不能简单表述为模型整体能力必然增强。若某些主类仍然表现较弱，应进一步分析其样本数量、空间尺度、遮挡、点云稀疏程度和标注一致性。
+
+论文中建议至少组织四组结果：26 类 validation baseline、10 类 validation baseline、10 类 formal validation 选择结果和 10 类 formal test 最终结果。若后续也为 26 类生成正式 test split，则应同样报告 26 类 test 结果。所有表格中应明确 split 名称，避免把 validation 指标与 test 指标混写。
 
 ## 论文表述建议
 
@@ -145,11 +215,15 @@ CUDA_VISIBLE_DEVICES=0 /home/ubuntu/anaconda3/envs/fshnet/bin/python tools/test.
 
 > 26 类实验主要用于揭示细粒度类别检测中的长尾问题和类别混淆现象，10 类实验则用于评估语义合并后主类别检测的稳定性。若合并后主类别 mAP 和召回率提升，说明类别重组能够缓解低频小类对宏平均指标的影响，并为后续实际部署提供更稳定的类别粒度。但该结果不能替代原始 26 类实验，因为二者对应不同的任务定义和评价目标。
 
+关于独立测试集，可使用如下表述：
+
+> 为避免验证集反复调参对最终结果造成偏置，本文进一步构建了按 scene 划分的 train/val/test 实验协议。同一 scene 内的所有帧只会被分配到一个数据划分中，从而减少连续帧泄漏。模型在 train split 上训练，在 val split 上选择 checkpoint 和实验配置，并在 test split 上报告最终性能。
+
 ## 注意事项
 
 - 10 类合并实验不能直接替代原始 26 类实验，两者应作为不同任务分别报告。
 - 论文中使用 10 类结果时，必须明确列出 26 类到 10 类的映射关系。
 - 所有模型比较必须使用相同的合并规则、相同的 train/val/test 划分和相同的评估协议。
 - 10 类 info 文件由 26 类 info 文件派生，不应覆盖原始 26 类 info 文件。
-- 如果未来单独划分 test set，应按 scene 划分，避免连续帧泄漏导致训练集和测试集高度相关。
+- 正式 test set 必须按 scene 划分，避免连续帧泄漏导致训练集、验证集和测试集高度相关。
 - 合并后的 `other` 类语义较宽，论文中应谨慎解释该类 AP，不宜将其作为核心类别性能代表。
