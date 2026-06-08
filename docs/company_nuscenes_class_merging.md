@@ -148,6 +148,22 @@ cd ~/WXY/pointcloud_Projects/FSHNet_ljl
 CUDA_VISIBLE_DEVICES=0 /home/ubuntu/anaconda3/envs/fshnet/bin/python tools/test.py --cfg_file tools/cfgs/nuscenes_models/company_fshnet_10cls_trainval.yaml --batch_size 1 --ckpt output/nuscenes_models/company_fshnet_10cls_trainval/company_fshnet_10cls_2gpu_bs2_run1/ckpt/checkpoint_epoch_36.pth
 ```
 
+对已经训练好的 26 类模型结果做 10 类后验合并评估：
+
+```bash
+cd ~/WXY/pointcloud_Projects/FSHNet_ljl
+python tools/company_nuscenes/evaluate_26cls_predictions_as_10cls.py \
+  --pred_pkl output/nuscenes_models/company_fshnet_26cls_trainval/default/eval/epoch_36/val/default/result.pkl \
+  --data_path data/nuscenes \
+  --version v1.0-trainval \
+  --info_pkl data/nuscenes/v1.0-trainval/company_nuscenes_10cls_infos_val.pkl \
+  --output_dir output/company_10cls_merged_eval_from_26cls
+```
+
+该脚本读取 26 类 `result.pkl`，优先使用每帧预测字典中的 `name` 字段进行类别映射，而不是依赖 `pred_labels`。这是因为 26 类模型输出的 `pred_labels` 仍然是原始 26 类编号，合并后必须按照 10 类 `CLASS_NAMES` 重新生成编号。脚本会保存 `result_10cls_from_26cls.pkl`、`company_metrics_summary.json` 和 `eval_10cls_from_26cls.txt`。
+
+需要注意，26 类模型的 10 类后验合并评估不等价于真正的 10 类训练模型。它只是把 26 类模型已经产生的细粒度预测结果在评估前合并为主类别，用于验证类别合并是否能够缓解长尾类别、细粒度类别混淆和宏平均指标波动问题。正式的 10 类 baseline 仍然需要使用 10 类 info 和 10 类配置重新训练，因为训练阶段的分类监督、类别竞争关系和损失分布都会发生变化。
+
 使用正式 train/val/test 配置训练：
 
 ```bash
