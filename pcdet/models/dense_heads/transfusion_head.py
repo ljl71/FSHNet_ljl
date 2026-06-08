@@ -570,6 +570,90 @@ class TransFusionHead(nn.Module):
         final_box_preds = torch.cat([center, height, dim, rot], dim=1).permute(0, 2, 1)
         return final_box_preds
 
+    def _is_company_eval(self):
+        post_process_cfg = self.model_cfg.get('POST_PROCESSING', {})
+        eval_metric = post_process_cfg.get('EVAL_METRIC', None) if hasattr(post_process_cfg, 'get') else None
+        return str(self.dataset_name).lower() == 'companynuscenes' or str(eval_metric).lower() == 'company'
+
+    def _format_boxes_for_eval(self, boxes3d):
+        if self._is_company_eval() and boxes3d.shape[-1] > 7:
+            return boxes3d[:, :7]
+        return boxes3d
+
+    def _get_nms_score_thresh(self):
+        if self.nms_cfg is None:
+            return None
+        return self.nms_cfg.get('SCORE_THRES', None) if hasattr(self.nms_cfg, 'get') else getattr(self.nms_cfg, 'SCORE_THRES', None)
+
+    def _get_nms_tasks(self, split_nuscenes_vehicle_tasks=False):
+        if self.dataset_name == "nuScenes":
+            if split_nuscenes_vehicle_tasks:
+                return [
+                    dict(num_class=1, class_names=[], indices=[0], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[1], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[2], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[3], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[4], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[5], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[6], radius=0.2),
+                    dict(num_class=1, class_names=[], indices=[7], radius=0.2),
+                    dict(num_class=1, class_names=["pedestrian"], indices=[8], radius=0.175),
+                    dict(num_class=1, class_names=["traffic_cone"], indices=[9], radius=0.175),
+                ]
+            return [
+                dict(num_class=8, class_names=[], indices=[0, 1, 2, 3, 4, 5, 6, 7], radius=-1),
+                dict(num_class=1, class_names=["pedestrian"], indices=[8], radius=0.175),
+                dict(num_class=1, class_names=["traffic_cone"], indices=[9], radius=0.175),
+            ]
+        if self.dataset_name == "Waymo":
+            return [
+                dict(num_class=1, class_names=["Car"], indices=[0], radius=0.7),
+                dict(num_class=1, class_names=["Pedestrian"], indices=[1], radius=0.7),
+                dict(num_class=1, class_names=["Cyclist"], indices=[2], radius=0.7),
+            ]
+        return None
+
+    def _single_head_nms(self, boxes3d, scores, labels):
+        keep_mask = torch.zeros(scores.shape[0], dtype=torch.bool, device=scores.device)
+        score_thresh = self._get_nms_score_thresh()
+        for cls_idx in labels.unique():
+            cls_mask = labels == cls_idx
+            cls_keep_indices, _ = model_nms_utils.class_agnostic_nms(
+                box_scores=scores[cls_mask],
+                box_preds=boxes3d[cls_mask][:, :7].clone().detach(),
+                nms_config=self.nms_cfg,
+                score_thresh=score_thresh,
+            )
+            if len(cls_keep_indices) != 0:
+                keep_indices = torch.where(cls_mask)[0][cls_keep_indices]
+                keep_mask[keep_indices] = True
+        return keep_mask
+
+    def _task_nms(self, boxes3d, scores, labels, nms_tasks):
+        keep_mask = torch.zeros(scores.shape[0], dtype=torch.bool, device=scores.device)
+        score_thresh = self._get_nms_score_thresh()
+        for task in nms_tasks:
+            task_mask = torch.zeros(scores.shape[0], dtype=torch.bool, device=scores.device)
+            for cls_idx in task["indices"]:
+                task_mask |= labels == cls_idx
+            if task["radius"] > 0:
+                top_scores = scores[task_mask]
+                boxes_for_nms = boxes3d[task_mask][:, :7].clone().detach()
+                task_nms_config = copy.deepcopy(self.nms_cfg)
+                task_nms_config.NMS_THRESH = task["radius"]
+                task_keep_indices, _ = model_nms_utils.class_agnostic_nms(
+                    box_scores=top_scores,
+                    box_preds=boxes_for_nms,
+                    nms_config=task_nms_config,
+                    score_thresh=score_thresh,
+                )
+            else:
+                task_keep_indices = torch.arange(int(task_mask.sum().item()), device=scores.device)
+            if len(task_keep_indices) != 0:
+                keep_indices = torch.where(task_mask)[0][task_keep_indices]
+                keep_mask[keep_indices] = True
+        return keep_mask
+
     
     def get_bboxes_v2(self, preds_dicts):
 
@@ -593,83 +677,7 @@ class TransFusionHead(nn.Module):
             batch_center, batch_height, batch_vel,
             filter=True,
         )
-        if self.dataset_name == "nuScenes":
-                self.tasks = [
-                    # dict(
-                    #     num_class=8,
-                    #     class_names=[],
-                    #     indices=[0, 1, 2, 3, 4, 5, 6, 7],
-                    #     radius=-1,
-                    # ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[0],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[1],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[2],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[3],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[4],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[5],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[6],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=[],
-                        indices=[7],
-                        radius=0.2,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=["pedestrian"],
-                        indices=[8],
-                        radius=0.175,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=["traffic_cone"],
-                        indices=[9],
-                        radius=0.175,
-                    ),
-                ]
-        elif self.dataset_name == "Waymo":
-            self.tasks = [
-                dict(num_class=1, class_names=["Car"], indices=[0], radius=0.7),
-                dict(
-                    num_class=1, class_names=["Pedestrian"], indices=[1], radius=0.7
-                ),
-                dict(num_class=1, class_names=["Cyclist"], indices=[2], radius=0.7),
-            ]
+        nms_tasks = self._get_nms_tasks(split_nuscenes_vehicle_tasks=True)
         for i in range(batch_size):
             boxes3d = ret_dict[i]["pred_boxes"]
             scores = ret_dict[i]["pred_scores"]
@@ -683,40 +691,24 @@ class TransFusionHead(nn.Module):
                 if len(IOU_RECTIFIER) == 1:
                     IOU_RECTIFIER = IOU_RECTIFIER.repeat(self.num_classes)
                 scores = torch.pow(scores, 1 - IOU_RECTIFIER[labels]) * torch.pow(pred_iou, IOU_RECTIFIER[labels])
-            
+
 
             if self.nms_cfg != None:
-                keep_mask = torch.zeros_like(scores)
-                for task in self.tasks:
-                    task_mask = torch.zeros_like(scores)
-                    for cls_idx in task["indices"]:
-                        task_mask += labels == cls_idx
-                    task_mask = task_mask.bool()
-                    if task["radius"] > 0:
-                        top_scores = scores[task_mask]
-                        boxes_for_nms = boxes3d[task_mask][:, :7].clone().detach()
-                        task_nms_config = copy.deepcopy(self.nms_cfg)
-                        task_nms_config.NMS_THRESH = task["radius"]
-                        task_keep_indices, _ = model_nms_utils.class_agnostic_nms(
-                                box_scores=top_scores, box_preds=boxes_for_nms,
-                                nms_config=task_nms_config, score_thresh=task_nms_config.SCORE_THRES)
-                    else:
-                        task_keep_indices = torch.arange(task_mask.sum())
-                    if task_keep_indices.shape[0] != 0:
-                        keep_indices = torch.where(task_mask != 0)[0][
-                            task_keep_indices
-                        ]
-                        keep_mask[keep_indices] = 1
-                keep_mask = keep_mask.bool()
-                ret_dict[i]['pred_boxes'] = boxes3d[keep_mask]
+                if nms_tasks is None:
+                    keep_mask = self._single_head_nms(boxes3d, scores, labels)
+                else:
+                    keep_mask = self._task_nms(boxes3d, scores, labels, nms_tasks)
+                ret_dict[i]['pred_boxes'] = self._format_boxes_for_eval(boxes3d[keep_mask])
                 ret_dict[i]['pred_scores'] = scores[keep_mask]
                 ret_dict[i]['pred_labels'] = labels[keep_mask].int() + 1
-            else:  
+            else:
                 # no nms
+                ret_dict[i]['pred_boxes'] = self._format_boxes_for_eval(boxes3d)
+                ret_dict[i]['pred_scores'] = scores
                 ret_dict[i]['pred_labels'] = ret_dict[i]['pred_labels'].int() + 1
 
 
-        return ret_dict 
+        return ret_dict
     
     def get_bboxes(self, preds_dicts):
 
@@ -740,35 +732,7 @@ class TransFusionHead(nn.Module):
             batch_center, batch_height, batch_vel,
             filter=True,
         )
-        if self.dataset_name == "nuScenes":
-                self.tasks = [
-                    dict(
-                        num_class=8,
-                        class_names=[],
-                        indices=[0, 1, 2, 3, 4, 5, 6, 7],
-                        radius=-1,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=["pedestrian"],
-                        indices=[8],
-                        radius=0.175,
-                    ),
-                    dict(
-                        num_class=1,
-                        class_names=["traffic_cone"],
-                        indices=[9],
-                        radius=0.175,
-                    ),
-                ]
-        elif self.dataset_name == "Waymo":
-            self.tasks = [
-                dict(num_class=1, class_names=["Car"], indices=[0], radius=0.7),
-                dict(
-                    num_class=1, class_names=["Pedestrian"], indices=[1], radius=0.7
-                ),
-                dict(num_class=1, class_names=["Cyclist"], indices=[2], radius=0.7),
-            ]
+        nms_tasks = self._get_nms_tasks(split_nuscenes_vehicle_tasks=False)
         for i in range(batch_size):
             boxes3d = ret_dict[i]["pred_boxes"]
             scores = ret_dict[i]["pred_scores"]
@@ -782,37 +746,21 @@ class TransFusionHead(nn.Module):
                 if len(IOU_RECTIFIER) == 1:
                     IOU_RECTIFIER = IOU_RECTIFIER.repeat(self.num_classes)
                 scores = torch.pow(scores, 1 - IOU_RECTIFIER[labels]) * torch.pow(pred_iou, IOU_RECTIFIER[labels])
-            
+
 
             if self.nms_cfg != None:
-                keep_mask = torch.zeros_like(scores)
-                for task in self.tasks:
-                    task_mask = torch.zeros_like(scores)
-                    for cls_idx in task["indices"]:
-                        task_mask += labels == cls_idx
-                    task_mask = task_mask.bool()
-                    if task["radius"] > 0:
-                        top_scores = scores[task_mask]
-                        boxes_for_nms = boxes3d[task_mask][:, :7].clone().detach()
-                        task_nms_config = copy.deepcopy(self.nms_cfg)
-                        task_nms_config.NMS_THRESH = task["radius"]
-                        task_keep_indices, _ = model_nms_utils.class_agnostic_nms(
-                                box_scores=top_scores, box_preds=boxes_for_nms,
-                                nms_config=task_nms_config, score_thresh=task_nms_config.SCORE_THRES)
-                    else:
-                        task_keep_indices = torch.arange(task_mask.sum())
-                    if task_keep_indices.shape[0] != 0:
-                        keep_indices = torch.where(task_mask != 0)[0][
-                            task_keep_indices
-                        ]
-                        keep_mask[keep_indices] = 1
-                keep_mask = keep_mask.bool()
-                ret_dict[i]['pred_boxes'] = boxes3d[keep_mask]
+                if nms_tasks is None:
+                    keep_mask = self._single_head_nms(boxes3d, scores, labels)
+                else:
+                    keep_mask = self._task_nms(boxes3d, scores, labels, nms_tasks)
+                ret_dict[i]['pred_boxes'] = self._format_boxes_for_eval(boxes3d[keep_mask])
                 ret_dict[i]['pred_scores'] = scores[keep_mask]
                 ret_dict[i]['pred_labels'] = labels[keep_mask].int() + 1
-            else:  
+            else:
                 # no nms
+                ret_dict[i]['pred_boxes'] = self._format_boxes_for_eval(boxes3d)
+                ret_dict[i]['pred_scores'] = scores
                 ret_dict[i]['pred_labels'] = ret_dict[i]['pred_labels'].int() + 1
 
 
-        return ret_dict 
+        return ret_dict
