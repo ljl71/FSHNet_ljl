@@ -1,3 +1,5 @@
+# Merged 10-class CompanyNuScenes train/val dataset config.
+# This preserves the original point format and only switches INFO_PATH.
 DATASET: 'CompanyNuScenesDataset'
 DATA_PATH: '../data/nuscenes'
 

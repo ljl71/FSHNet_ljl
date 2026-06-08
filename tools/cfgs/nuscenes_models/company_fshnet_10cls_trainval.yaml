@@ -1,3 +1,5 @@
+# Merged 10-class CompanyNuScenes FSHNet config.
+# This file is deliberately kept as normal multi-line YAML.
 CLASS_NAMES: [
     'pedestrian',
     'car',

@@ -1,3 +1,4 @@
+# Merged 10-class CompanyNuScenes config with formal scene-level train/val/test split.
 _BASE_CONFIG_: tools/cfgs/nuscenes_models/company_fshnet_10cls_trainval.yaml
 
 DATA_CONFIG:

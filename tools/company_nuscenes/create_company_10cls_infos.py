@@ -1,3 +1,10 @@
+"""
+Create merged 10-class CompanyNuScenes info files.
+
+This script intentionally keeps imports, constants, helpers, and CLI handling
+on separate lines so GitHub raw output remains valid Python source.
+"""
+
 import argparse
 import copy
 import importlib.util

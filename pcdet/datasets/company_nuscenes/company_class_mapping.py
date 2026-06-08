@@ -1,4 +1,9 @@
-"""Class mappings for CompanyNuScenes semantic-merging experiments."""
+"""
+Class mappings for CompanyNuScenes semantic-merging experiments.
+
+Keep this file in explicit multi-line Python format so it remains readable in
+GitHub raw view and can be checked directly with python -m py_compile.
+"""
 
 COMPANY_26_CLASS_NAMES = [
     'human_pedestrian_adult',
