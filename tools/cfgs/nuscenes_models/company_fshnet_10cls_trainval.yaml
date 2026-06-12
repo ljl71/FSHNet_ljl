@@ -18,11 +18,11 @@ DATA_CONFIG:
     SAMPLED_INTERVAL: {'train': 1, 'test': 1}
     BALANCED_RESAMPLING: False
     DATASET: 'CompanyNuScenesDataset'
-    DATA_PATH: 'data/nuscenes'
-    VERSION: 'v1.0-trainval'
+    DATA_PATH: 'data/NuScenes-develop_t23_2026'
+    VERSION: 'v1.0-develop'
     MAX_SWEEPS: 1
     LIDAR_POINT_DIM: 4
-    LIDAR_POINT_FORMAT: float32
+    LIDAR_POINT_FORMAT: pcd
     LIDAR_POINT_FIELDS: ['x', 'y', 'z', 'intensity']
     PRED_VELOCITY: False
     # Company data is single-frame LiDAR only. These zero velocities only keep

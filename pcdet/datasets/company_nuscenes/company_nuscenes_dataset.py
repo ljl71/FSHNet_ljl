@@ -21,6 +21,7 @@ class CompanyNuScenesDataset(DatasetTemplate):
         self.infos = []
         self.point_dim = len(point_io.get_src_feature_list(self.dataset_cfg))
         self.lidar_point_dim = point_io.get_lidar_point_dim(self.dataset_cfg, default=self.point_dim)
+        self._warned_missing_num_lidar_pts = False
         self.include_company_nuscenes_data(self.mode)
 
     def _log(self, msg):
@@ -47,7 +48,8 @@ class CompanyNuScenesDataset(DatasetTemplate):
         if lidar_path.is_absolute():
             candidates = [lidar_path]
         else:
-            candidates = [self.data_path / lidar_path, self.metadata_path / lidar_path]
+            candidates = [self.data_path / lidar_path, self.metadata_path / lidar_path, lidar_path]
+        candidates.extend(self._suffix_lidar_candidates(lidar_path))
 
         resolved_path = None
         for candidate in candidates:
@@ -69,6 +71,16 @@ class CompanyNuScenesDataset(DatasetTemplate):
         return point_io.read_lidar_bin(
             lidar_path, self.dataset_cfg, fallback_dim=self.lidar_point_dim
         )
+
+    def _suffix_lidar_candidates(self, lidar_path):
+        candidates = []
+        parts = lidar_path.parts
+        for marker in ('samples', 'sweeps'):
+            if marker not in parts:
+                continue
+            rel_path = Path(*parts[parts.index(marker):])
+            candidates.extend([self.data_path / rel_path, self.metadata_path / rel_path])
+        return candidates
 
     def get_lidar_with_sweeps(self, index, max_sweeps=1):
         if max_sweeps != 1:
@@ -111,10 +123,20 @@ class CompanyNuScenesDataset(DatasetTemplate):
         if 'gt_boxes' in info:
             if self.dataset_cfg.get('FILTER_MIN_POINTS_IN_GT', False):
                 min_points = self.dataset_cfg.FILTER_MIN_POINTS_IN_GT
-                mask = [
-                    count is None or count >= min_points
-                    for count in info['num_lidar_pts']
-                ]
+                point_counts = info.get('num_lidar_pts')
+                if point_counts is None:
+                    if not self._warned_missing_num_lidar_pts:
+                        self._log(
+                            'num_lidar_pts is missing from info records; '
+                            'FILTER_MIN_POINTS_IN_GT will be skipped for these records.'
+                        )
+                        self._warned_missing_num_lidar_pts = True
+                    mask = None
+                else:
+                    mask = [
+                        count is None or count >= min_points
+                        for count in point_counts
+                    ]
             else:
                 mask = None
             input_dict.update({

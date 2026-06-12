@@ -1,14 +1,14 @@
 # Merged 10-class CompanyNuScenes train/val dataset config.
 # This preserves the original point format and only switches INFO_PATH.
 DATASET: 'CompanyNuScenesDataset'
-DATA_PATH: '../data/nuscenes'
+DATA_PATH: 'data/NuScenes-develop_t23_2026'
 
 # Merged 10-class CompanyNuScenes infos generated from the original 26-class
 # info files by tools/company_nuscenes/create_company_10cls_infos.py.
-VERSION: 'v1.0-trainval'
+VERSION: 'v1.0-develop'
 MAX_SWEEPS: 1
 LIDAR_POINT_DIM: 4
-LIDAR_POINT_FORMAT: float32
+LIDAR_POINT_FORMAT: pcd
 LIDAR_POINT_FIELDS: ['x', 'y', 'z', 'intensity']
 PRED_VELOCITY: False
 FILTER_MIN_POINTS_IN_GT: 1
