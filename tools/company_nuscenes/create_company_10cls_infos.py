@@ -34,14 +34,16 @@ DEFAULT_OUTPUTS = {
     'val': 'company_nuscenes_10cls_infos_val.pkl',
     'test': 'company_nuscenes_10cls_infos_test.pkl',
 }
+DEFAULT_DATA_PATH = Path('data/NuScenes-develop_t23_2026')
+DEFAULT_VERSION = 'v1.0-develop'
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Create 10-class merged CompanyNuScenes info files from existing 26-class info files.'
     )
-    parser.add_argument('--data_path', type=Path, default=Path('data/nuscenes'))
-    parser.add_argument('--version', type=str, default='v1.0-trainval')
+    parser.add_argument('--data_path', type=Path, default=DEFAULT_DATA_PATH)
+    parser.add_argument('--version', type=str, default=DEFAULT_VERSION)
     parser.add_argument(
         '--split_mode', choices=['trainval', 'trainvaltest'], default='trainval',
         help='trainval maps existing train/val infos; trainvaltest repartitions all source infos by scene_token.'
@@ -67,6 +69,27 @@ def save_infos(path, infos):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'wb') as f:
         pickle.dump(infos, f)
+
+
+def require_source_infos(paths, args):
+    missing = [path for path in paths if not path.exists()]
+    if not missing:
+        return
+
+    missing_text = '\n'.join(f'  {path}' for path in missing)
+    command = (
+        'python tools/company_nuscenes/create_company_infos.py '
+        f'--data_path {args.data_path} '
+        f'--save_path {args.data_path} '
+        f'--version {args.version} '
+        '--max_sweeps 1 --min_lidar_points 1'
+    )
+    raise FileNotFoundError(
+        'Missing source 26-class CompanyNuScenes info files:\n'
+        f'{missing_text}\n'
+        'Generate the source info files first, for example:\n'
+        f'{command}'
+    )
 
 
 def merge_info_names(infos, class_mapping):
@@ -201,6 +224,7 @@ def split_infos_by_scene(infos, train_ratio, val_ratio, test_ratio, split_seed):
 def load_source_infos(root, args):
     train_path = root / args.train_info
     val_path = root / args.val_info
+    require_source_infos([train_path, val_path], args)
     train_infos = load_infos(train_path)
     val_infos = load_infos(val_path)
     return train_infos, val_infos, train_path, val_path

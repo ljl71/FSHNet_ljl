@@ -122,7 +122,11 @@ def check_info_file(root, data_root, info_name, min_lidar_points):
 def main():
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description='Check CompanyNuScenes info files')
-    parser.add_argument('--root', type=Path, default=repo_root / 'data' / 'nuscenes' / 'v1.0-trainval')
+    parser.add_argument(
+        '--root',
+        type=Path,
+        default=repo_root / 'data' / 'NuScenes-develop_t23_2026' / 'v1.0-develop'
+    )
     parser.add_argument(
         '--cfg_file', type=Path, default=None,
         help='optional model config; fills root, class names and min-points filter from DATA_CONFIG'

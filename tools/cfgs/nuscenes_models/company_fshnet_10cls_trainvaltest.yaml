@@ -4,11 +4,11 @@ _BASE_CONFIG_: tools/cfgs/nuscenes_models/company_fshnet_10cls_trainval.yaml
 DATA_CONFIG:
     _BASE_CONFIG_: tools/cfgs/dataset_configs/company_nuscenes_10cls_trainvaltest_dataset.yaml
     DATASET: 'CompanyNuScenesDataset'
-    DATA_PATH: 'data/nuscenes'
-    VERSION: 'v1.0-trainval'
+    DATA_PATH: 'data/NuScenes-develop_t23_2026'
+    VERSION: 'v1.0-develop'
     MAX_SWEEPS: 1
     LIDAR_POINT_DIM: 4
-    LIDAR_POINT_FORMAT: float32
+    LIDAR_POINT_FORMAT: pcd
     LIDAR_POINT_FIELDS: ['x', 'y', 'z', 'intensity']
     PRED_VELOCITY: False
     ZERO_VELOCITY_FOR_FSHNET: True

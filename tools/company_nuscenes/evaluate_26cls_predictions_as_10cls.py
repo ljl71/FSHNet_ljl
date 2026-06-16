@@ -22,6 +22,8 @@ DEFAULT_PRED_PKL = (
     'eval/epoch_36/val/default/result.pkl'
 )
 DEFAULT_OUTPUT_DIR = 'output/company_10cls_merged_eval_from_26cls'
+DEFAULT_DATA_PATH = 'data/NuScenes-develop_t23_2026'
+DEFAULT_VERSION = 'v1.0-develop'
 
 
 def load_module(module_name, path):
@@ -36,8 +38,8 @@ def parse_args():
         description='Evaluate saved 26-class CompanyNuScenes predictions as merged 10-class predictions.'
     )
     parser.add_argument('--pred_pkl', type=Path, default=Path(DEFAULT_PRED_PKL))
-    parser.add_argument('--data_path', type=Path, default=Path('data/nuscenes'))
-    parser.add_argument('--version', type=str, default='v1.0-trainval')
+    parser.add_argument('--data_path', type=Path, default=Path(DEFAULT_DATA_PATH))
+    parser.add_argument('--version', type=str, default=DEFAULT_VERSION)
     parser.add_argument('--info_pkl', type=Path, default=None)
     parser.add_argument('--output_dir', type=Path, default=Path(DEFAULT_OUTPUT_DIR))
     parser.add_argument('--min_lidar_points', type=int, default=1)
@@ -59,7 +61,7 @@ def require_existing_info(info_path):
         return
     command = (
         'python tools/company_nuscenes/create_company_10cls_infos.py '
-        '--data_path data/nuscenes --version v1.0-trainval --split_mode trainval'
+        f'--data_path {DEFAULT_DATA_PATH} --version {DEFAULT_VERSION} --split_mode trainval'
     )
     raise FileNotFoundError(
         f'10-class info file not found: {info_path}\n'
